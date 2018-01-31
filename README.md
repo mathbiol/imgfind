@@ -1,2 +1,4 @@
 # imgfind
-distributed ocr for box
+crawling images with OCR for Box backends
+
+Live at https://mathbiol.github.io/imgFind !
