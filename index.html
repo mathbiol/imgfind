@@ -1,2 +1,32 @@
-<h2 style="color:maroon">imgFind</h2>
-<button onclick="location.href = 'https://account.box.com/api/oauth2/authorize?response_type=code&client_id=1cf9xjqa83lx77agvkmm7rg635wvuh7t&state=security_token%3DKnhMJatFipTAnM0nHlZA'"; type="button">Connect to Box!</button> 
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script>
+		var url = window.location.href;
+		var state = url.substring(url.indexOf('=')+1, url.indexOf('&'))
+		var code = url.substring(url.indexOf('code=')+5, url.length)
+		// var params = url.substring(url.indexOf('?')+1, url.length);
+		console.log(state,"wfadasad\n\ndasdadas",code)
+
+		function myFunction(){
+			var xhr = new XMLHttpRequest();
+			xhr.open('POST', 'https://api.box.com/oauth2/token', true);
+			xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+			xhr.onload = function () {
+			    // do something to response
+			    console.log("gjfjfjgfjg",this);
+			};
+			xhr.send('grant_type=authorization_code&code=' + code + '&client_id=1cf9xjqa83lx77agvkmm7rg635wvuh7t&client_secret=o0p0xgaRvSooele09STKonmKLJiFzNbv');
+		}
+
+	</script>
+</head>
+
+
+<body onload="myFunction()";>
+	<h2 style="color:maroon">imgFind</h2>
+	<button type="button">Connect to Box!</button>
+</body>
+
+</html>
