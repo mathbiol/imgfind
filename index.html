@@ -7,26 +7,45 @@
 		var state = url.substring(url.indexOf('=')+1, url.indexOf('&'))
 		var code = url.substring(url.indexOf('code=')+5, url.length)
 		// var params = url.substring(url.indexOf('?')+1, url.length);
-		console.log(state,"wfadasad\n\ndasdadas",code)
 
-		function myFunction(){
-			var xhr = new XMLHttpRequest();
-			xhr.open('POST', 'https://api.box.com/oauth2/token', true);
-			xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-			xhr.onload = function () {
-			    // do something to response
-			    console.log("gjfjfjgfjg",this);
-			};
-			xhr.send('grant_type=authorization_code&code=' + code + '&client_id=1cf9xjqa83lx77agvkmm7rg635wvuh7t&client_secret=o0p0xgaRvSooele09STKonmKLJiFzNbv');
+		function saveAccessToken(response) {
+			sessionStorage.access_token = response.access_token
+		}
+
+		function boxOAuth() {
+			if (sessionStorage.access_token) {
+				authenticationSuccess();
+			} else {
+				var xhr = new XMLHttpRequest();
+				xhr.open('POST', 'https://api.box.com/oauth2/token', true);
+				xhr.responseType = 'json';
+				xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+				xhr.onload = function () {
+					if (xhr.status = 200) {
+						authenticationSuccess();
+				        saveAccessToken(xhr.response);
+					}
+				};
+				xhr.send('grant_type=authorization_code&code=' + code + '&client_id=4v47e213getqp2da9aggsd589r2ui1iz&client_secret=secret');
+			}
+		}
+
+		function authenticationSuccess() {
+			var div = document.getElementById("success_msg");
+			// div.textContent = "Congratulations! You have successfully connected your Box account!";
+			div.style.visibility = "visible"
 		}
 
 	</script>
 </head>
 
 
-<body onload="myFunction()";>
+<body onload="boxOAuth()";>
 	<h2 style="color:maroon">imgFind</h2>
-	<button type="button">Connect to Box!</button>
+	<div id="success_msg" visibility="hidden">
+		Congratulations! You have successfully connected your Box account! <br><br>
+	</div>
+	
 </body>
 
 </html>
