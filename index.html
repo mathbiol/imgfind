@@ -37,6 +37,7 @@
 
 		function fetchAndIndexImagesFromBox() {
 			fetchImagesFromBox();
+			indexImages();
 		}
 
 		function fetchImagesFromBox() {
@@ -66,6 +67,36 @@
 			}
 			sessionStorage.imageIds = JSON.stringify(imageIds);
 			document.getElementById("img_search_results").textContent = "Found " + response.total_count + " image(s)!";
+		}
+
+		function indexImages() {
+			if (sessionStorage.imageIds) {
+				imageIds = JSON.parse(sessionStorage.imageIds);
+				for (var imageId in imageIds) {
+					if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId]) {
+						fetchImageFromBox(imageId);
+					}
+				}
+			}
+		}
+
+		function fetchImageFromBox(imageId) {
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', 'https://api.box.com/2.0/files/' + imageId + '/content', true);
+			xhr.setRequestHeader('Authorization', 'Bearer ' + sessionStorage.access_token)
+			xhr.responseType = 'blob';
+			xhr.onload = function () {
+				if (xhr.status = 200) {
+					renderImage(xhr.response);
+				}
+			};
+			xhr.send();
+		}
+
+		function renderImage(imageBlob) {
+			var imageUrl = URL.createObjectURL(imageBlob);
+			document.getElementById("image_indexing_progress_msg").textContent = "Processing following image:";
+			document.querySelector("#selected_image").src = imageUrl;
 		}
 
 	</script>
