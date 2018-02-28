@@ -32,8 +32,40 @@
 
 		function authenticationSuccess() {
 			var div = document.getElementById("success_msg");
-			// div.textContent = "Congratulations! You have successfully connected your Box account!";
 			div.style.visibility = "visible"
+		}
+
+		function fetchAndIndexImagesFromBox() {
+			fetchImagesFromBox();
+		}
+
+		function fetchImagesFromBox() {
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', 'https://api.box.com/2.0/search?query=png', true);
+			xhr.setRequestHeader('Authorization', 'Bearer ' + sessionStorage.access_token)
+			xhr.responseType = 'json';
+			xhr.onload = function () {
+				if (xhr.status = 200) {
+					saveBoxSearchJsonResponse(xhr.response)
+				}
+			};
+			xhr.send();
+		}
+
+		function saveBoxSearchJsonResponse(response) {
+			var imageIds = JSON.parse('{}');
+			if(sessionStorage.imageIds) {
+				imageIds = JSON.parse(sessionStorage.imageIds);
+			}
+
+			for (index = 0; index < response.total_count; index++) {
+				img_id = response.entries[index].id;
+				if (!imageIds.hasOwnProperty(img_id)) {
+					imageIds[img_id] = false;
+				}
+			}
+			sessionStorage.imageIds = JSON.stringify(imageIds);
+			document.getElementById("img_search_results").textContent = "Found " + response.total_count + " image(s)!";
 		}
 
 	</script>
@@ -44,6 +76,17 @@
 	<h2 style="color:maroon">imgFind</h2>
 	<div id="success_msg" visibility="hidden">
 		Congratulations! You have successfully connected your Box account! <br><br>
+		To make your image files in Box searchable click below! <br>
+		<button onclick="fetchAndIndexImagesFromBox()">Index Images!</button> <br><br>
+	</div>
+	<div id="img_search_results">
+	</div>
+	<br>
+	<br>
+	<div id="image_indexing_progress_msg">
+	</div>
+	<div id="image_indexing_progress">
+		<img id="selected_image"/>
 	</div>
 	
 </body>
