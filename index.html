@@ -42,7 +42,7 @@
 
 		function fetchImagesFromBox() {
 			var xhr = new XMLHttpRequest();
-			xhr.open('GET', 'https://api.box.com/2.0/search?query=png', true);
+			xhr.open('GET', 'https://api.box.com/2.0/search?query=jpeg', true);
 			xhr.setRequestHeader('Authorization', 'Bearer ' + sessionStorage.access_token)
 			xhr.responseType = 'json';
 			xhr.onload = function () {
