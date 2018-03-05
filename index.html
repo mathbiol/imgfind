@@ -61,7 +61,7 @@
 				imageIds = JSON.parse(sessionStorage.imageIds);
 			}
 
-			for (index = 0; index < response.total_count; index++) {
+			for (index = 0; index < response.entries.length; index++) {
 				img_id = response.entries[index].id;
 				if (!imageIds.hasOwnProperty(img_id)) {
 					imageIds[img_id] = false;
