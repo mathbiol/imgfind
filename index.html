@@ -2,6 +2,7 @@
 <html>
 <head>
 	<title></title>
+	<script src='https://cdn.rawgit.com/naptha/tesseract.js/1.0.10/dist/tesseract.js'></script>
 	<script>
 		var url = window.location.href;
 		var state = url.substring(url.indexOf('=')+1, url.indexOf('&'))
@@ -26,7 +27,7 @@
 				        saveAccessToken(xhr.response);
 					}
 				};
-				xhr.send('grant_type=authorization_code&code=' + code + '&client_id=4v47e213getqp2da9aggsd589r2ui1iz&client_secret=secret');
+				xhr.send('grant_type=authorization_code&code=' + code + '&client_id=1cf9xjqa83lx77agvkmm7rg635wvuh7t&client_secret=o0p0xgaRvSooele09STKonmKLJiFzNbv');
 			}
 		}
 
@@ -55,6 +56,7 @@
 
 		function saveBoxSearchJsonResponse(response) {
 			var imageIds = JSON.parse('{}');
+			console.log(sessionStorage.imageIds);
 			if(sessionStorage.imageIds) {
 				imageIds = JSON.parse(sessionStorage.imageIds);
 			}
@@ -71,32 +73,88 @@
 
 		function indexImages() {
 			if (sessionStorage.imageIds) {
+				
 				imageIds = JSON.parse(sessionStorage.imageIds);
+				var divShown = document.getElementById("success_msg");
+				var tbl = document.createElement("table");
+  				var tblBody = document.createElement("tbody");
+				tbl.setAttribute("id", "imgTable");
+				tblBody.setAttribute("id", "imgTableBody");
+				var i = 0;
 				for (var imageId in imageIds) {
+					i++;
 					if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId]) {
-						fetchImageFromBox(imageId);
+						fetchImageFromBox(imageId, i);
 					}
 				}
+				var row = document.createElement("th");
+				
+
+				var cell = document.createElement("td");
+				var cellText = document.createTextNode("Image");
+				cell.appendChild(cellText);
+				row.appendChild(cell);
+
+				// cell = document.createElement("td");
+				// cellText = document.createTextNode("Image Data");
+				// cell.appendChild(cellText);
+				// row.appendChild(cell);
+
+				tblBody.appendChild(row);
+				tbl.appendChild(tblBody);
+				divShown.append(tbl);
+				tbl.setAttribute("border", "2");
+
 			}
 		}
 
-		function fetchImageFromBox(imageId) {
+		function fetchImageFromBox(imageId, i) {
 			var xhr = new XMLHttpRequest();
 			xhr.open('GET', 'https://api.box.com/2.0/files/' + imageId + '/content', true);
 			xhr.setRequestHeader('Authorization', 'Bearer ' + sessionStorage.access_token)
 			xhr.responseType = 'blob';
 			xhr.onload = function () {
 				if (xhr.status = 200) {
-					renderImage(xhr.response);
+					renderImage(xhr.response, i);
 				}
 			};
 			xhr.send();
 		}
 
-		function renderImage(imageBlob) {
+		function renderImage(imageBlob, index) {
 			var imageUrl = URL.createObjectURL(imageBlob);
-			document.getElementById("image_indexing_progress_msg").textContent = "Processing following image:";
-			document.querySelector("#selected_image").src = imageUrl;
+
+			parseImage(imageBlob, function(res) {
+			
+				var row = document.createElement("tr");
+				
+
+				var cell = document.createElement("td");
+				var x = document.createElement('img');
+				x.setAttribute('src', imageUrl)
+				x.style.width = "80%";
+				cell.appendChild(x);
+				row.appendChild(cell);
+
+				cell = document.createElement("td");
+				var cellText = document.createTextNode(res);
+				cell.appendChild(cellText);
+				row.appendChild(cell);
+
+			    var tblBody = document.getElementById('imgTableBody')
+			    var tbl = document.getElementById('imgTable')
+			    tblBody.appendChild(row);
+
+			});
+		}
+
+
+		function parseImage(imageBlob, cb) {
+
+			Tesseract.recognize(imageBlob)
+			    .then(function(result) {
+			    	cb(result.text);
+			    })
 		}
 
 	</script>
