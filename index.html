@@ -2,7 +2,8 @@
 <html>
 
 <head>
-    <title></title>
+    <title>ImgFind</title>
+    <script src='https://cdn.rawgit.com/naptha/tesseract.js/1.0.10/dist/tesseract.js'></script>
     <script>
     var url = window.location.href;
     var state = url.substring(url.indexOf('=') + 1, url.indexOf('&'))
@@ -21,7 +22,7 @@
             requestBody.append('client_id', '4v47e213getqp2da9aggsd589r2ui1iz');
             requestBody.append('client_secret', 'opWSY6oXqQd3KaNRcaVm9waczXfe6n2V');
             var headers = new Headers({ 'Content-Type': 'application/x-www-form-urlencoded' });
-            var httpResponse = httpRequest('https://api.box.com/oauth2/token', requestBody, headers, 'POST');
+            var httpResponse = httpRequest('https://api.box.com/oauth2/token', headers, requestBody, 'POST');
 
             httpResponse.then(function(response) {
                 if (response.status == 200) {
@@ -80,19 +81,19 @@
 
     function fetchAndIndexImagesFromBox() {
         fetchAndStoreImageIdsFromBox();
+        indexImages();
     }
 
     function fetchAndStoreImageIdsFromBox() {
-        access_tokens = getLocalAccessTokens();
-        var headers = new Headers({ 'Authorization': 'Bearer ' + access_tokens.box.access_token });
         // TODO: search other image formats
-        var httpResponse = httpRequest('https://api.box.com/2.0/search?query=png', null, headers);
+        var httpResponse = fetchDataFromBox('https://api.box.com/2.0/search?query=png');
         // TODO: Implement paginated fetch
         httpResponse.then(function(response) {
             if (response.status == 200) {
-                return response.json();
+                return response.responseBody;
+                // return response.json(); // To be used with fetch
             }
-            throw new Error("Fetching images from Box failed with response code:" + response.statusText);
+            throw new Error("Fetching image ids from Box failed with response code:" + response.statusText);
         }).then(saveBoxSearchJsonResponse).catch(function(error) {
             console.log(error);
         });
@@ -114,7 +115,139 @@
         document.getElementById("img_search_results").textContent = "Found " + response.total_count + " image(s)!";
     }
 
-    function httpRequest(url, body, headers, method = 'GET', mode = 'cors') {
+    function indexImages() {
+        if (sessionStorage.imageIds) {
+            imageIds = JSON.parse(sessionStorage.imageIds);
+            renderResultTable();
+            for (var imageId in imageIds) {
+                if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId]) {
+                    var imgFetch = fetchImageFromBox(imageId).then(function(response) {
+                        if (response.status == 200) {
+                            return response.responseBody;
+                            //return response.blob(); // used with fetch
+                        }
+                        throw new Error("Fetching image from Box failed with response code:" + response.statusText);
+                    });
+                    var imgParse = imgFetch.then(parseImage);
+                    Promise.all([imgFetch, imgParse]).then(renderImage).catch(function(error) {
+                        console.log("Indexing image with id: " + imageId + " failed");
+                        console.log(error);
+                    });
+
+                    // To be used with fetch
+                    // fetchImageFromBox(imageId).then(function(response) {
+                    //     if (response.status == 200) {
+                    //         return response.blob(); // used with fetch
+                    //     }
+                    //     throw new Error("Fetching image from Box failed with response code:" + response.statusText);
+                    // }).then(parseImage).then(renderImage).catch(function(error) {
+                    //     console.log("Indexing image with id: " + imageId + " failed");
+                    //     console.log(error);
+                    // });
+                }
+            }
+        }
+    }
+
+    function renderResultTable() {
+        if (document.getElementById("imgTable") == null) {
+            var divShown = document.getElementById("image_indexing_progress");
+            var tbl = document.createElement("table");
+            var tblBody = document.createElement("tbody");
+            tbl.setAttribute("id", "imgTable");
+            tblBody.setAttribute("id", "imgTableBody");
+            var row = document.createElement("tr");
+            var cell = document.createElement("td");
+            var cellText = document.createTextNode("Image");
+            cell.appendChild(cellText);
+            row.appendChild(cell);
+            tbl.setAttribute("border", "2");
+            cell = document.createElement("td");
+            cellText = document.createTextNode("Image Data");
+            cell.appendChild(cellText);
+            row.appendChild(cell);
+            tblBody.appendChild(row);
+            tbl.appendChild(tblBody);
+            divShown.append(tbl);
+        }
+    }
+
+    function renderImage(imageAndParse) {
+        console.log(imageAndParse);
+        var imageUrl = URL.createObjectURL(imageAndParse[0]);
+        var row = document.createElement("tr");
+        var cell = document.createElement("td");
+        var x = document.createElement('img');
+        x.setAttribute('src', imageUrl)
+        x.style.width = "80%";
+        cell.appendChild(x);
+        row.appendChild(cell);
+
+        cell = document.createElement("td");
+        var cellText = document.createTextNode(imageAndParse[1]);
+        cell.appendChild(cellText);
+        row.appendChild(cell);
+
+        var tblBody = document.getElementById('imgTableBody')
+        var tbl = document.getElementById('imgTable')
+        tblBody.appendChild(row);
+    }
+
+    function fetchImageFromBox(imageId) {
+        return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content', 'blob');
+        // With fetch
+        // return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content');
+    }
+
+    function fetchDataFromBox(url, responseType = 'json') {
+        return new Promise(function(resolve, reject) {
+            access_tokens = getLocalAccessTokens();
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
+            xhr.responseType = responseType;
+            xhr.onload = function() {
+                if (xhr.status = 200) {
+                    resolve({
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseBody: xhr.response
+                    });
+                } else {
+                    reject({
+                        status: xhr.status,
+                        statusText: xhr.statusText
+                    });
+                }
+            };
+            xhr.onerror = function() {
+                reject({
+                    status: xhr.status,
+                    statusText: xhr.statusText
+                });
+            };
+            xhr.send();
+        });
+
+
+        // To be used once fetch stops lowercasing headers
+        // var headers = new Headers({Authorization: 'Bearer ' + access_tokens.box.access_token });
+        // return httpRequest(url, headers);
+    }
+
+    function parseImage(imageBlob) {
+        return new Promise(function(resolve, reject) {
+            Tesseract.recognize(imageBlob)
+                .then(function(result) {
+                    resolve(result.text);
+                }).catch(function(error) {
+                    reject("Parsing image failed with: " + error.message);
+                });
+        });
+
+    }
+
+    function httpRequest(url, headers, body, method = 'GET', mode = 'cors') {
         if (url == null) {
             throw "URL is not specified for the request."
         }
@@ -142,10 +275,7 @@
     </div>
     <br>
     <br>
-    <div id="image_indexing_progress_msg">
-    </div>
     <div id="image_indexing_progress">
-        <img id="selected_image" />
     </div>
 </body>
 
