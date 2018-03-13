@@ -78,6 +78,42 @@
         }
     }
 
+    function fetchAndIndexImagesFromBox() {
+        fetchAndStoreImageIdsFromBox();
+    }
+
+    function fetchAndStoreImageIdsFromBox() {
+        access_tokens = getLocalAccessTokens();
+        var headers = new Headers({ 'Authorization': 'Bearer ' + access_tokens.box.access_token });
+        // TODO: search other image formats
+        var httpResponse = httpRequest('https://api.box.com/2.0/search?query=png', null, headers);
+        // TODO: Implement paginated fetch
+        httpResponse.then(function(response) {
+            if (response.status == 200) {
+                return response.json();
+            }
+            throw new Error("Fetching images from Box failed with response code:" + response.statusText);
+        }).then(saveBoxSearchJsonResponse).catch(function(error) {
+            console.log(error);
+        });
+    }
+
+    function saveBoxSearchJsonResponse(response) {
+        var imageIds = JSON.parse('{}');
+        if (sessionStorage.imageIds) {
+            imageIds = JSON.parse(sessionStorage.imageIds);
+        }
+
+        for (index = 0; index < response.entries.length; index++) {
+            img_id = response.entries[index].id;
+            if (!imageIds.hasOwnProperty(img_id)) {
+                imageIds[img_id] = false;
+            }
+        }
+        sessionStorage.imageIds = JSON.stringify(imageIds);
+        document.getElementById("img_search_results").textContent = "Found " + response.total_count + " image(s)!";
+    }
+
     function httpRequest(url, body, headers, method = 'GET', mode = 'cors') {
         if (url == null) {
             throw "URL is not specified for the request."
