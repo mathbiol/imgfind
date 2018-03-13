@@ -1,183 +1,116 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-	<title></title>
-	<script src='https://cdn.rawgit.com/naptha/tesseract.js/1.0.10/dist/tesseract.js'></script>
-	<script>
-		var url = window.location.href;
-		var state = url.substring(url.indexOf('=')+1, url.indexOf('&'))
-		var code = url.substring(url.indexOf('code=')+5, url.length)
-		// var params = url.substring(url.indexOf('?')+1, url.length);
+    <title></title>
+    <script>
+    var url = window.location.href;
+    var state = url.substring(url.indexOf('=') + 1, url.indexOf('&'))
+    var code = url.substring(url.indexOf('code=') + 5, url.length)
 
-		function saveAccessToken(response) {
-			sessionStorage.access_token = response.access_token
-		}
+    function boxOAuth() {
+        var access_tokens = getLocalAccessTokens();
+        if (access_tokens.hasOwnProperty('box') &&
+            access_tokens.box.hasOwnProperty('access_token') &&
+            access_tokens.box.access_token != null) {
+            authenticationSuccess();
+        } else {
+            var requestBody = new URLSearchParams();
+            requestBody.append('grant_type', 'authorization_code');
+            requestBody.append('code', code);
+            requestBody.append('client_id', '4v47e213getqp2da9aggsd589r2ui1iz');
+            requestBody.append('client_secret', 'opWSY6oXqQd3KaNRcaVm9waczXfe6n2V');
+            var headers = new Headers({ 'Content-Type': 'application/x-www-form-urlencoded' });
+            var httpResponse = httpRequest('https://api.box.com/oauth2/token', requestBody, headers, 'POST');
 
-		function boxOAuth() {
-			if (sessionStorage.access_token) {
-				authenticationSuccess();
-			} else {
-				var xhr = new XMLHttpRequest();
-				xhr.open('POST', 'https://api.box.com/oauth2/token', true);
-				xhr.responseType = 'json';
-				xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-				xhr.onload = function () {
-					if (xhr.status = 200) {
-						authenticationSuccess();
-				        saveAccessToken(xhr.response);
-					}
-				};
-				xhr.send('grant_type=authorization_code&code=' + code + '&client_id=1cf9xjqa83lx77agvkmm7rg635wvuh7t&client_secret=o0p0xgaRvSooele09STKonmKLJiFzNbv');
-			}
-		}
+            httpResponse.then(function(response) {
+                if (response.status == 200) {
+                    return response.json();
+                }
+                throw new Error("Box OAuth failed with response code:" + response.statusText);
+            }).then(function(responseJson) {
+                access_tokens.box = {
+                    access_token: responseJson.access_token,
+                    refresh_token: responseJson.refresh_token
+                };
+                setLocalAccessTokens(access_tokens);
+                authenticationSuccess();
+            }).catch(function(error) {
+                console.log(error);
+                authenticationFailure();
+            });
+        }
+    }
 
-		function authenticationSuccess() {
-			var div = document.getElementById("success_msg");
-			div.style.visibility = "visible"
-		}
+    function authenticationSuccess() {
+        var button = document.createElement("button");
+        button.innerHTML = "Index Images!";
+        button.addEventListener("click", function() {
+            fetchAndIndexImagesFromBox();
+        });
 
-		function fetchAndIndexImagesFromBox() {
-			fetchImagesFromBox();
-			indexImages();
-		}
+        var div = document.getElementById("success_msg");
+        div.innerHTML = "Congratulations! You have successfully connected your Box account! <br><br> To make your image files in Box searchable click below! <br>";
+        div.appendChild(button);
 
-		function fetchImagesFromBox() {
-			var xhr = new XMLHttpRequest();
-			xhr.open('GET', 'https://api.box.com/2.0/search?query=png', true);
-			xhr.setRequestHeader('Authorization', 'Bearer ' + sessionStorage.access_token)
-			xhr.responseType = 'json';
-			xhr.onload = function () {
-				if (xhr.status = 200) {
-					saveBoxSearchJsonResponse(xhr.response)
-				}
-			};
-			xhr.send();
-		}
+        div.style.visibility = "visible"
+    }
 
-		function saveBoxSearchJsonResponse(response) {
-			var imageIds = JSON.parse('{}');
-			console.log(sessionStorage.imageIds);
-			if(sessionStorage.imageIds) {
-				imageIds = JSON.parse(sessionStorage.imageIds);
-			}
+    function authenticationFailure() {
+        var div = document.getElementById("success_msg");
+        div.innerHTML = "Sorry! Authorization failed! <br>";
+        div.style.visibility = "visible"
+    }
 
-			for (index = 0; index < response.entries.length; index++) {
-				img_id = response.entries[index].id;
-				if (!imageIds.hasOwnProperty(img_id)) {
-					imageIds[img_id] = false;
-				}
-			}
-			sessionStorage.imageIds = JSON.stringify(imageIds);
-			document.getElementById("img_search_results").textContent = "Found " + response.total_count + " image(s)!";
-		}
+    function getLocalAccessTokens() {
+        if (sessionStorage.access_tokens === undefined || sessionStorage.access_tokens == null) {
+            return {};
+        } else {
+            return JSON.parse(sessionStorage.access_tokens);
+        }
+    }
 
-		function indexImages() {
-			if (sessionStorage.imageIds) {
-				
-				imageIds = JSON.parse(sessionStorage.imageIds);
-				var divShown = document.getElementById("success_msg");
-				var tbl = document.createElement("table");
-  				var tblBody = document.createElement("tbody");
-				tbl.setAttribute("id", "imgTable");
-				tblBody.setAttribute("id", "imgTableBody");
-				var i = 0;
-				for (var imageId in imageIds) {
-					i++;
-					if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId]) {
-						fetchImageFromBox(imageId, i);
-					}
-				}
-				var row = document.createElement("th");
-				
+    function setLocalAccessTokens(access_tokens) {
+        if (access_tokens == null) {
+            sessionStorage.access_tokens = '{}';
+        } else {
+            sessionStorage.access_tokens = JSON.stringify(access_tokens);
+        }
+    }
 
-				var cell = document.createElement("td");
-				var cellText = document.createTextNode("Image");
-				cell.appendChild(cellText);
-				row.appendChild(cell);
+    function httpRequest(url, body, headers, method = 'GET', mode = 'cors') {
+        if (url == null) {
+            throw "URL is not specified for the request."
+        }
+        request = {
+            'method': method,
+            'mode': mode
+        }
+        if (body != null) {
+            request.body = body;
+        }
+        if (headers != null) {
+            request.headers = headers;
+        }
 
-				// cell = document.createElement("td");
-				// cellText = document.createTextNode("Image Data");
-				// cell.appendChild(cellText);
-				// row.appendChild(cell);
-
-				tblBody.appendChild(row);
-				tbl.appendChild(tblBody);
-				divShown.append(tbl);
-				tbl.setAttribute("border", "2");
-
-			}
-		}
-
-		function fetchImageFromBox(imageId, i) {
-			var xhr = new XMLHttpRequest();
-			xhr.open('GET', 'https://api.box.com/2.0/files/' + imageId + '/content', true);
-			xhr.setRequestHeader('Authorization', 'Bearer ' + sessionStorage.access_token)
-			xhr.responseType = 'blob';
-			xhr.onload = function () {
-				if (xhr.status = 200) {
-					renderImage(xhr.response, i);
-				}
-			};
-			xhr.send();
-		}
-
-		function renderImage(imageBlob, index) {
-			var imageUrl = URL.createObjectURL(imageBlob);
-
-			parseImage(imageBlob, function(res) {
-			
-				var row = document.createElement("tr");
-				
-
-				var cell = document.createElement("td");
-				var x = document.createElement('img');
-				x.setAttribute('src', imageUrl)
-				x.style.width = "80%";
-				cell.appendChild(x);
-				row.appendChild(cell);
-
-				cell = document.createElement("td");
-				var cellText = document.createTextNode(res);
-				cell.appendChild(cellText);
-				row.appendChild(cell);
-
-			    var tblBody = document.getElementById('imgTableBody')
-			    var tbl = document.getElementById('imgTable')
-			    tblBody.appendChild(row);
-
-			});
-		}
-
-
-		function parseImage(imageBlob, cb) {
-
-			Tesseract.recognize(imageBlob)
-			    .then(function(result) {
-			    	cb(result.text);
-			    })
-		}
-
-	</script>
+        return fetch(url, request);
+    }
+    </script>
 </head>
 
-
-<body onload="boxOAuth()";>
-	<h2 style="color:maroon">imgFind</h2>
-	<div id="success_msg" visibility="hidden">
-		Congratulations! You have successfully connected your Box account! <br><br>
-		To make your image files in Box searchable click below! <br>
-		<button onclick="fetchAndIndexImagesFromBox()">Index Images!</button> <br><br>
-	</div>
-	<div id="img_search_results">
-	</div>
-	<br>
-	<br>
-	<div id="image_indexing_progress_msg">
-	</div>
-	<div id="image_indexing_progress">
-		<img id="selected_image"/>
-	</div>
-	
+<body onload="boxOAuth()" ;>
+    <h2 style="color:maroon">imgFind</h2>
+    <div id="success_msg">
+    </div>
+    <div id="img_search_results">
+    </div>
+    <br>
+    <br>
+    <div id="image_indexing_progress_msg">
+    </div>
+    <div id="image_indexing_progress">
+        <img id="selected_image" />
+    </div>
 </body>
 
 </html>
