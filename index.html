@@ -101,6 +101,7 @@
         // TODO: Implement paginated fetch
         httpResponse.then(function(response) {
             if (response.status == 200) {
+                console.log(response.responseBody, "-----------------------")
                 return response.responseBody;
                 // return response.json(); // To be used with fetch
             }
@@ -119,9 +120,20 @@
         for (index = 0; index < response.entries.length; index++) {
             img_id = response.entries[index].id;
             if (!imageIds.hasOwnProperty(img_id)) {
-                imageIds[img_id] = false;
+                var path = "";
+                for(var i = 0; i < response.entries[index].path_collection.total_count; i++) 
+                    path = path + response.entries[index].path_collection.entries[i].name + "/";
+
+                imageIds[img_id] = {
+                    "name" : response.entries[index].name,
+                    "parent" : response.entries[index].parent.id,
+                    "path" : path,
+                    "id" : img_id,
+                    "processed" : false
+                };
             }
         }
+
         sessionStorage.imageIds = JSON.stringify(imageIds);
         document.getElementById("img_search_results").textContent = "Found " + response.total_count + " image(s)!";
     }
@@ -129,18 +141,36 @@
     function indexImages() {
         if (sessionStorage.imageIds) {
             imageIds = JSON.parse(sessionStorage.imageIds);
-            renderResultTable();
+            // renderResultTable();
+
             for (var imageId in imageIds) {
-                if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId]) {
+                if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId].processed) {
+                    
                     var imgFetch = fetchImageFromBox(imageId).then(function(response) {
+                        
                         if (response.status == 200) {
-                            return response.responseBody;
-                            //return response.blob(); // used with fetch
+
+                            console.log(response, " <---------------- inside");
+
+                            var result =  {
+                                "imageBlob" : response.responseBody,
+                                "imageName" : response.imageData.name,
+                                "imageId" : response.imageData.id,
+                                "parentFolder" : response.imageData.parent,
+                                "imagePath" : response.imageData.path
+
+                            }
+
+                            return result;
                         }
                         throw new Error("Fetching image from Box failed with response code:" + response.statusText);
                     });
+                    
                     var imgParse = imgFetch.then(parseImage);
-                    Promise.all([imgFetch, imgParse]).then(renderImage).catch(function(error) {
+                    
+                    // var uploadFile = imgParse.then(fileUpload);
+
+                    Promise.all([imgFetch, imgParse]).then(fileUpload).catch(function(error) {
                         console.log("Indexing image with id: " + imageId + " failed");
                         console.log(error);
                     });
@@ -158,6 +188,43 @@
                 }
             }
         }
+    }
+
+    function fileUpload(parseResponse) {
+        var form = new FormData();
+        
+        var json = {
+            "id" : parseResponse[0].imageId,
+            "name" : parseResponse[0].imageName,
+            "path" : parseResponse[0].imagePath,
+            "content" : parseResponse[1]
+        }
+
+        var fileBody = JSON.stringify(json, null, 4);
+        var fileName = parseResponse[0].imageName.split('.')[0] + ".json";
+        var attributes = {
+            "name" : fileName,
+            "parent" : {
+                "id" : parseResponse[0].parentFolder
+            }
+        }
+
+        form.append('file', new Blob([fileBody], { type: "text/json"}));
+        form.append('attributes', JSON.stringify(attributes));
+
+        var xhr = new XMLHttpRequest();
+
+        xhr.open('POST', 'https://upload.box.com/api/2.0/files/content', true);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
+        // xhr.setRequestHeader('Content-Type', 'multipart/form-data');
+        xhr.onload = function () {
+            if (xhr.status = 200) {
+                console.log(xhr.response);
+            }
+        };
+
+        xhr.send(form);
+
     }
 
     function renderResultTable() {
@@ -184,8 +251,7 @@
     }
 
     function renderImage(imageAndParse) {
-        console.log(imageAndParse);
-        var imageUrl = URL.createObjectURL(imageAndParse[0]);
+        var imageUrl = URL.createObjectURL(imageAndParse[0].imageBlob);
         var row = document.createElement("tr");
         var cell = document.createElement("td");
         var x = document.createElement('img');
@@ -205,13 +271,19 @@
     }
 
     function fetchImageFromBox(imageId) {
-        return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content', 'blob');
+        return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content', imageId, 'blob');
         // With fetch
         // return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content');
     }
 
-    function fetchDataFromBox(url, responseType = 'json') {
+    function fetchDataFromBox(url, imageId, responseType = 'json') {
         return new Promise(function(resolve, reject) {
+            var imageIds = {}
+            if (sessionStorage.imageIds) 
+                imageIds = JSON.parse(sessionStorage.imageIds);
+
+            var imageData = imageIds[imageId];
+
             access_tokens = getLocalAccessTokens();
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
@@ -222,7 +294,8 @@
                     resolve({
                         status: xhr.status,
                         statusText: xhr.statusText,
-                        responseBody: xhr.response
+                        responseBody: xhr.response,
+                        imageData : imageData
                     });
                 } else {
                     reject({
@@ -248,14 +321,13 @@
 
     function parseImage(imageBlob) {
         return new Promise(function(resolve, reject) {
-            Tesseract.recognize(imageBlob)
+            Tesseract.recognize(imageBlob.imageBlob)
                 .then(function(result) {
                     resolve(result.text);
                 }).catch(function(error) {
                     reject("Parsing image failed with: " + error.message);
                 });
         });
-
     }
 
     function httpRequest(url, headers, body, method = 'GET', mode = 'cors') {
