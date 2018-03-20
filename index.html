@@ -218,8 +218,12 @@
         xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
         // xhr.setRequestHeader('Content-Type', 'multipart/form-data');
         xhr.onload = function () {
-            if (xhr.status = 200) {
-                console.log(xhr.response);
+            if (xhr.status == 200) {
+                console.log("File saved successfully");
+            } else if (xhr.status == 409) {
+                console.log("A file with same name already exists!")
+            } else {
+                console.log("Some error occured.");
             }
         };
 
