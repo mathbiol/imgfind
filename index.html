@@ -9,7 +9,7 @@
     var state = url.substring(url.indexOf('=') + 1, url.indexOf('&'))
     var code = url.substring(url.indexOf('code=') + 5, url.length)
 
-    function boxOAuth() {
+    function boxOAuth(refresh = false) {
         var access_tokens = getLocalAccessTokens();
         if (access_tokens.hasOwnProperty('box') &&
             access_tokens.box.hasOwnProperty('access_token') &&
@@ -17,8 +17,15 @@
             authenticationSuccess();
         } else {
             var requestBody = new URLSearchParams();
-            requestBody.append('grant_type', 'authorization_code');
-            requestBody.append('code', code);
+            if (refresh && access_tokens.hasOwnProperty('box') &&
+                access_tokens.box.hasOwnProperty('refresh_token') &&
+                access_tokens.box.refresh_token != null) {
+                requestBody.append('grant_type', 'refresh_token');
+                requestBody.append('refresh_token', access_tokens.box.refresh_token);
+            } else {
+                requestBody.append('grant_type', 'authorization_code');
+                requestBody.append('code', code);
+            }
             requestBody.append('client_id', '1cf9xjqa83lx77agvkmm7rg635wvuh7t');
             requestBody.append('client_secret', 'o0p0xgaRvSooele09STKonmKLJiFzNbv');
             var headers = new Headers({ 'Content-Type': 'application/x-www-form-urlencoded' });
@@ -82,6 +89,10 @@
     function fetchAndIndexImagesFromBox() {
         fetchAndStoreImageIdsFromBox();
         indexImages();
+    }
+
+    function refreshBoxToken() {
+        boxOAuth(true);
     }
 
     function fetchAndStoreImageIdsFromBox() {
