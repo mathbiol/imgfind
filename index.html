@@ -205,7 +205,7 @@
                     var metadata = {
                         'imageContent' : data[1]
                     }
-                    addMetadata(metadata, fileId)
+                    addNewMetadata(metadata, fileId)
                 } else if( JSON.parse(xhr.response).entries.length != 0 && !JSON.parse(xhr.response).entries[0].imageContent) {
                     updateMetadata("add", data[1], fileId);
                 } else {
