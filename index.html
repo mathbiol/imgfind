@@ -200,17 +200,51 @@
         xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
 
         xhr.onload = function(){
-            if(JSON.parse(xhr.response).entries.length == 0) {
-                var metadata = {
-                    'imageContent' : data[1]
+            if(xhr.status == 200){
+                if(JSON.parse(xhr.response).entries.length == 0) {
+                    var metadata = {
+                        'imageContent' : data[1]
+                    }
+                    addMetadata(metadata, fileId)
+                } else if( JSON.parse(xhr.response).entries.length != 0 && !JSON.parse(xhr.response).entries[0].imageContent) {
+                    updateMetadata("add", data[1], fileId);
+                } else {
+                    updateMetadata("replace", data[1], fileId);
                 }
-                addMetadata(metadata, fileId)
-            } 
+            } else {
+                console.log("Some error occured while updating metadata");
+            }
         }
 
         xhr.send();
     }
 
+    function updateMetadata(op, value, fileId) {
+        var access_tokens = getLocalAccessTokens();
+        
+        var data = [{
+            "op" : op,
+            "path" : "/imageContent",
+            "value" : value
+        }]
+
+
+        var xhr = new XMLHttpRequest();
+        
+        xhr.open('PUT', 'https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', true);
+
+        xhr.setRequestHeader('Content-Type', 'application/json-patch+json');
+        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
+
+        xhr.onload = function(){
+            if(xhr.status == 200)
+                console.log("Metadata Updated");
+            else
+                console.log("Some error occured while updating metadata");
+        }
+
+        xhr.send(JSON.stringify(data));
+    }
 
     function addNewMetadata(metadata, fileId) {
         var access_tokens = getLocalAccessTokens();
@@ -232,7 +266,7 @@
     }
 
 
-
+    //function to be used when json file containing metadata is to be uploaded
     function fileUpload(parseResponse) {
         var access_tokens = getLocalAccessTokens();
         var form = new FormData();
