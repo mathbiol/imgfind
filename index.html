@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 
@@ -101,7 +102,6 @@
         // TODO: Implement paginated fetch
         httpResponse.then(function(response) {
             if (response.status == 200) {
-                console.log(response.responseBody, "-----------------------")
                 return response.responseBody;
                 // return response.json(); // To be used with fetch
             }
@@ -150,8 +150,6 @@
                         
                         if (response.status == 200) {
 
-                            console.log(response, " <---------------- inside");
-
                             var result =  {
                                 "imageBlob" : response.responseBody,
                                 "imageName" : response.imageData.name,
@@ -170,7 +168,7 @@
                     
                     // var uploadFile = imgParse.then(fileUpload);
 
-                    Promise.all([imgFetch, imgParse]).then(fileUpload).catch(function(error) {
+                    Promise.all([imgFetch, imgParse]).then(metadata).catch(function(error) {
                         console.log("Indexing image with id: " + imageId + " failed");
                         console.log(error);
                     });
@@ -190,7 +188,53 @@
         }
     }
 
+    function metadata(data) {
+        var access_tokens = getLocalAccessTokens();
+        var xhr = new XMLHttpRequest();
+
+        var fileId = data[0].imageId;
+       
+        xhr.open('GET', 'https://api.box.com/2.0/files/' + fileId + '/metadata', true);
+
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
+
+        xhr.onload = function(){
+            if(JSON.parse(xhr.response).entries.length == 0) {
+                var metadata = {
+                    'imageContent' : data[1]
+                }
+                addMetadata(metadata, fileId)
+            } 
+        }
+
+        xhr.send();
+    }
+
+
+    function addNewMetadata(metadata, fileId) {
+        var access_tokens = getLocalAccessTokens();
+        var xhr = new XMLHttpRequest();
+        
+        xhr.open('POST', 'https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', true);
+
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
+
+        xhr.onload = function(){
+            if(xhr.status == 200)
+                console.log("Metadata Updated");
+            else
+                console.log("Some error occured while updating metadata")
+        }
+
+        xhr.send(JSON.stringify(metadata));
+    }
+
+
+
     function fileUpload(parseResponse) {
+        var access_tokens = getLocalAccessTokens();
         var form = new FormData();
         
         var json = {
