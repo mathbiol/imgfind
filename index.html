@@ -37,13 +37,16 @@
                     return response.json();
                 }
                 throw new Error("Box OAuth failed with response code:" + response.statusText);
+
             }).then(function(responseJson) {
                 access_tokens.box = {
                     access_token: responseJson.access_token,
                     refresh_token: responseJson.refresh_token
                 };
+
                 setLocalAccessTokens(access_tokens);
                 authenticationSuccess();
+
             }).catch(function(error) {
                 console.log(error);
                 authenticationFailure();
@@ -120,17 +123,8 @@
         for (index = 0; index < response.entries.length; index++) {
             img_id = response.entries[index].id;
             if (!imageIds.hasOwnProperty(img_id)) {
-                var path = "";
-                for(var i = 0; i < response.entries[index].path_collection.total_count; i++) 
-                    path = path + response.entries[index].path_collection.entries[i].name + "/";
 
-                imageIds[img_id] = {
-                    "name" : response.entries[index].name,
-                    "parent" : response.entries[index].parent.id,
-                    "path" : path,
-                    "id" : img_id,
-                    "processed" : false
-                };
+                imageIds[img_id] = false
             }
         }
 
@@ -141,37 +135,11 @@
     function indexImages() {
         if (sessionStorage.imageIds) {
             imageIds = JSON.parse(sessionStorage.imageIds);
-            // renderResultTable();
 
             for (var imageId in imageIds) {
                 if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId].processed) {
-                    
-                    var imgFetch = fetchImageFromBox(imageId).then(function(response) {
-                        
-                        if (response.status == 200) {
 
-                            var result =  {
-                                "imageBlob" : response.responseBody,
-                                "imageName" : response.imageData.name,
-                                "imageId" : response.imageData.id,
-                                "parentFolder" : response.imageData.parent,
-                                "imagePath" : response.imageData.path
-
-                            }
-
-                            return result;
-                        }
-                        throw new Error("Fetching image from Box failed with response code:" + response.statusText);
-                    });
-                    
-                    var imgParse = imgFetch.then(parseImage);
-                    
-                    // var uploadFile = imgParse.then(fileUpload);
-
-                    Promise.all([imgFetch, imgParse]).then(metadata).catch(function(error) {
-                        console.log("Indexing image with id: " + imageId + " failed");
-                        console.log(error);
-                    });
+                	metadata(imageId)
 
                     // To be used with fetch
                     // fetchImageFromBox(imageId).then(function(response) {
@@ -188,183 +156,127 @@
         }
     }
 
-    function metadata(data) {
+    function metadata(fileId) {
+
         var access_tokens = getLocalAccessTokens();
-        var xhr = new XMLHttpRequest();
 
-        var fileId = data[0].imageId;
+        // var fileId = data[0].imageId;
        
-        xhr.open('GET', 'https://api.box.com/2.0/files/' + fileId + '/metadata', true);
+        var headers = new Headers({ 'Content-Type': 'application/json', 'Authorization' : 'Bearer ' + access_tokens.box.access_token });
+        var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata', headers, null, 'GET');
 
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
-
-        xhr.onload = function(){
-            if(xhr.status == 200){
-                if(JSON.parse(xhr.response).entries.length == 0) {
-                    var metadata = {
-                        'imageContent' : data[1]
-                    }
-                    addMetadata(metadata, fileId)
-                } else if( JSON.parse(xhr.response).entries.length != 0 && !JSON.parse(xhr.response).entries[0].imageContent) {
-                    updateMetadata("add", data[1], fileId);
-                } else {
-                    updateMetadata("replace", data[1], fileId);
-                }
-            } else {
-                console.log("Some error occured while updating metadata");
+        httpResponse.then(function(response) {
+            if (response.status == 200) {
+                return response.json();
             }
-        }
-
-        xhr.send();
+        }).then(function(res) {
+        	checkAndUpdate(res, fileId);
+        }).catch(function(error) {
+            console.log(error);
+        });
     }
 
-    function updateMetadata(op, value, fileId) {
+
+    function checkAndUpdate(res, imageId) {
+
+    	if(res && res.entries && res.entries.length != 0 && res.entries[0].imageContent) {
+    		console.log("Metadata already exists");
+    	} else {
+    		
+    		var imgFetch = fetchImageFromBox(imageId).then(function(response) {
+                
+                if (response.status == 200) {
+
+                    var result =  {
+                        "imageBlob" : response.responseBody,
+                        "imageId" : imageId
+                    }
+                    
+                    return result;
+                }
+                throw new Error("Fetching image from Box failed with response code:" + response.statusText);
+            });
+            
+            var imgParse = imgFetch.then(parseImage);
+
+            if(res.entries.length == 0){
+	            Promise.all([imgFetch, imgParse]).then(addNewMetadata).catch(function(error) {
+	                console.log("Indexing image with id: " + imageId + " failed");
+	                console.log(error);
+	            });
+	        } else {
+	        	 Promise.all([imgFetch, imgParse]).then(updateMetadata).catch(function(error) {
+	                console.log("Indexing image with id: " + imageId + " failed");
+	                console.log(error);
+	            });
+	        }
+
+    	}
+    }
+
+    function updateMetadata(data) {
         var access_tokens = getLocalAccessTokens();
         
-        var data = [{
-            "op" : op,
+        var metadata = [{
+            "op" : "add",
             "path" : "/imageContent",
-            "value" : value
+            "value" : data[1]
         }]
 
+        var fileId = data[0].imageId;
 
         var xhr = new XMLHttpRequest();
         
-        xhr.open('PUT', 'https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', true);
+        var headers = new Headers({ 'Content-Type': 'application/json-patch+json', 'Authorization' : 'Bearer ' + access_tokens.box.access_token });
+        var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', headers, JSON.stringify(metadata), 'PUT');
 
-        xhr.setRequestHeader('Content-Type', 'application/json-patch+json');
-        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
-
-        xhr.onload = function(){
-            if(xhr.status == 200)
-                console.log("Metadata Updated");
-            else
-                console.log("Some error occured while updating metadata");
-        }
-
-        xhr.send(JSON.stringify(data));
-    }
-
-    function addNewMetadata(metadata, fileId) {
-        var access_tokens = getLocalAccessTokens();
-        var xhr = new XMLHttpRequest();
-        
-        xhr.open('POST', 'https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', true);
-
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
-
-        xhr.onload = function(){
-            if(xhr.status == 200)
-                console.log("Metadata Updated");
-            else
-                console.log("Some error occured while updating metadata")
-        }
-
-        xhr.send(JSON.stringify(metadata));
-    }
-
-
-    //function to be used when json file containing metadata is to be uploaded
-    function fileUpload(parseResponse) {
-        var access_tokens = getLocalAccessTokens();
-        var form = new FormData();
-        
-        var json = {
-            "id" : parseResponse[0].imageId,
-            "name" : parseResponse[0].imageName,
-            "path" : parseResponse[0].imagePath,
-            "content" : parseResponse[1]
-        }
-
-        var fileBody = JSON.stringify(json, null, 4);
-        var fileName = parseResponse[0].imageName + ".json";
-        var attributes = {
-            "name" : fileName,
-            "parent" : {
-                "id" : parseResponse[0].parentFolder
+        httpResponse.then(function(response) {
+            if (response.status == 200) {
+                return response.json();
             }
+        }).then(function(res) {
+        	console.log("Metadata Updated");
+        }).catch(function(error) {
+            console.log("Some error occured while updating metadata");
+        });
+       
+    }
+
+    function addNewMetadata(data) {
+        
+        var access_tokens = getLocalAccessTokens();
+
+        var body = {
+        	"imageContent" : data[1]
         }
 
-        form.append('file', new Blob([fileBody], { type: "text/json"}));
-        form.append('attributes', JSON.stringify(attributes));
+        var fileId = data[0].imageId;
 
-        var xhr = new XMLHttpRequest();
+        var headers = new Headers({ 'Content-Type': 'application/json', 'Authorization' : 'Bearer ' + access_tokens.box.access_token });
+        var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', headers, JSON.stringify(body), 'POST');
 
-        xhr.open('POST', 'https://upload.box.com/api/2.0/files/content', true);
-        xhr.setRequestHeader('Authorization', 'Bearer ' + access_tokens.box.access_token);
-        // xhr.setRequestHeader('Content-Type', 'multipart/form-data');
-        xhr.onload = function () {
-            if (xhr.status == 200) {
-                console.log("File saved successfully");
-            } else if (xhr.status == 409) {
-                console.log("A file with same name already exists!")
-            } else {
-                console.log("Some error occured.");
+        httpResponse.then(function(response) {
+            if (response.status == 200) {
+                return response.json();
             }
-        };
-
-        xhr.send(form);
+        }).then(function(res) {
+        	console.log("Metadata Added");
+        }).catch(function(error) {
+            console.log("Some error occured while adding metadata");
+        });
 
     }
 
-    function renderResultTable() {
-        if (document.getElementById("imgTable") == null) {
-            var divShown = document.getElementById("image_indexing_progress");
-            var tbl = document.createElement("table");
-            var tblBody = document.createElement("tbody");
-            tbl.setAttribute("id", "imgTable");
-            tblBody.setAttribute("id", "imgTableBody");
-            var row = document.createElement("tr");
-            var cell = document.createElement("td");
-            var cellText = document.createTextNode("Image");
-            cell.appendChild(cellText);
-            row.appendChild(cell);
-            tbl.setAttribute("border", "2");
-            cell = document.createElement("td");
-            cellText = document.createTextNode("Image Data");
-            cell.appendChild(cellText);
-            row.appendChild(cell);
-            tblBody.appendChild(row);
-            tbl.appendChild(tblBody);
-            divShown.append(tbl);
-        }
-    }
 
-    function renderImage(imageAndParse) {
-        var imageUrl = URL.createObjectURL(imageAndParse[0].imageBlob);
-        var row = document.createElement("tr");
-        var cell = document.createElement("td");
-        var x = document.createElement('img');
-        x.setAttribute('src', imageUrl)
-        x.style.width = "80%";
-        cell.appendChild(x);
-        row.appendChild(cell);
-
-        cell = document.createElement("td");
-        var cellText = document.createTextNode(imageAndParse[1]);
-        cell.appendChild(cellText);
-        row.appendChild(cell);
-
-        var tblBody = document.getElementById('imgTableBody')
-        var tbl = document.getElementById('imgTable')
-        tblBody.appendChild(row);
-    }
 
     function fetchImageFromBox(imageId) {
-        return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content', imageId, 'blob');
+        return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content', 'blob');
         // With fetch
         // return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content');
     }
 
-    function fetchDataFromBox(url, imageId, responseType = 'json') {
+    function fetchDataFromBox(url, responseType = 'json') {
         return new Promise(function(resolve, reject) {
-            var imageIds = {}
-            if (sessionStorage.imageIds) 
-                imageIds = JSON.parse(sessionStorage.imageIds);
-
-            var imageData = imageIds[imageId];
 
             access_tokens = getLocalAccessTokens();
             var xhr = new XMLHttpRequest();
@@ -376,8 +288,7 @@
                     resolve({
                         status: xhr.status,
                         statusText: xhr.statusText,
-                        responseBody: xhr.response,
-                        imageData : imageData
+                        responseBody: xhr.response
                     });
                 } else {
                     reject({
