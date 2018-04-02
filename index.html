@@ -102,18 +102,21 @@
     }
 
     function fetchImageIdsFromBox() {
+        var limit = 100;
+        var offset = 0;
         for (var index = 0; index < img_extensions.length; index++) {
-            fetchAndStoreImageIdsFromBox(img_extensions[index]);
+            fetchAndStoreImageIdsFromBox(img_extensions[index], offset, limit);
         }
     }
 
-    function fetchAndStoreImageIdsFromBox(extension) {
-        var url = 'https://api.box.com/2.0/search?query=' + extension + '&fields=id&type=file&file_extensions=' +
-            img_extensions.join(",");
+    function fetchAndStoreImageIdsFromBox(extension, offset=0, limit=100) {
+        var url = 'https://api.box.com/2.0/search?query=' + extension + '&fields=id&limit=' + limit +
+            '&offset=' + offset + '&type=file&file_extensions=' + img_extensions.join(",");
         var httpResponse = fetchDataFromBox(url);
-        // TODO: Implement paginated fetch
+        var totalEntries = 0;
         var apiResponse = httpResponse.then(function (response) {
             if (response.status == 200) {
+                totalEntries = response.responseBody.total_count;
                 return response.responseBody;
                 // return response.json(); // To be used with fetch
             }
@@ -121,6 +124,15 @@
         });
 
         apiResponse.then(saveBoxImageSearchResponse).catch(function (error) {
+            console.log(error);
+        });
+
+        apiResponse.then(function (response) {
+            var nextOffset = offset + limit;
+            if (totalEntries > nextOffset) {
+                fetchAndStoreImageIdsFromBox(extension, nextOffset, limit);
+            }
+        }).catch(function (error) {
             console.log(error);
         });
     }
@@ -358,6 +370,7 @@
 
         return fetch(url, request);
     }
+
 
     </script>
 </head>
