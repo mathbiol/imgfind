@@ -256,7 +256,8 @@
             'Content-Type': 'application/json-patch+json',
             'Authorization': 'Bearer ' + access_tokens.box.access_token
         });
-        var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', headers, JSON.stringify(metadata), 'PUT');
+        var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties',
+            headers, JSON.stringify(metadata), 'PUT');
 
         httpResponse.then(function (response) {
             if (response.status == 200) {
@@ -371,6 +372,61 @@
         return fetch(url, request);
     }
 
+    function searchFilesInBox(url='', offset=0, limit=100) {
+        if (url == '') {
+            var searchVal = document.getElementById("file_search_box").value;
+            if (searchVal != null && searchVal.trim() != '') {
+                url = 'https://api.box.com/2.0/search?query=' + searchVal.trim() + '&fields=id,name&type=file'
+            }
+        }
+        if (url == '') {
+            return;
+        }
+        var httpResponse = fetchDataFromBox(url + '&offset=' + offset + '&limit=' + limit);
+        var totalEntries = 0;
+        var apiResponse = httpResponse.then(function (response) {
+            if (response.status == 200) {
+                totalEntries = response.responseBody.total_count;
+                return response.responseBody;
+                // return response.json(); // To be used with fetch
+            }
+            throw new Error("Fetching image ids from Box failed with response code:" + response.statusText);
+        }).catch(function (error) {
+            console.log(error);
+        });
+
+        apiResponse.then(handleFileSearchResponse).catch(function (error) {
+            console.log(error);
+        });
+
+        apiResponse.then(function (response) {
+            var nextOffset = offset + limit;
+            if (totalEntries > nextOffset) {
+                searchFilesInBox(url, nextOffset, limit)
+            }
+        }).catch(function (error) {
+            console.log(error);
+        });
+    }
+
+    function handleFileSearchResponse(response) {
+        var div = document.getElementById("search_results");
+        div.innerHTML = '';
+        var results_found = response.total_count;
+        div.append(document.createElement("br"));
+        div.append('\nFound ' + results_found + ' result(s) for your search query!')
+        div.append(document.createElement("br"));
+        for (var index = 0; index < response.entries.length; index++) {
+            var link = document.createElement("a");
+            var linkText = document.createTextNode(response.entries[index].name);
+            link.appendChild(linkText);
+            // link.title = response.entries[index].name;
+            link.target = "_blank";
+            link.href = "https://app.box.com/file/" + response.entries[index].id;
+            div.appendChild(link);
+            div.append(document.createElement("br"));
+        }
+    }
 
     </script>
 </head>
@@ -384,6 +440,13 @@
 <br>
 <br>
 <div id="image_indexing_progress">
+</div>
+<div id="search_space">
+    <h3>File Search</h3>
+    <input type="search" id="file_search_box" placeholder="Search your files">
+    <button onclick="searchFilesInBox()">Go!</button>
+</div>
+<div id="search_results">
 </div>
 </body>
 
