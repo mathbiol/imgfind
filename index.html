@@ -3,10 +3,36 @@
 
 <head>
     <title>ImgFind</title>
+
+    <style>
+        .accordion {
+            transition: 0.4s;
+        }
+
+        .panel {
+            padding: 0 18px;
+            background-color: white;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out;
+        }
+
+        .preview-container {
+            border: 1px solid #eee;
+            height: 490px;
+            width: 100%;
+        }
+    </style>
+
     <script src='https://cdn.rawgit.com/naptha/tesseract.js/1.0.10/dist/tesseract.js'></script>
+
+    <script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=Promise"></script>
+    <script src="https://cdn01.boxcdn.net/platform/preview/1.37.1/en-US/preview.js"></script>
+    <link rel="stylesheet" href="https://cdn01.boxcdn.net/platform/preview/1.37.1/en-US/preview.css" />
+
     <script>
     var img_extensions = ['png', 'jpg', 'jpeg', 'svg', 'tif', 'bmp', 'pnm'];
-
+   
     function boxOAuth(refresh = false) {
         var url = window.location.href;
         var code = null
@@ -48,23 +74,19 @@
                 }
                 alert("Box OAuth failed");
                 throw new Error("Box OAuth failed with response code:" + response.statusText);
-
             }).then(function (responseJson) {
                 access_tokens.box = {
                     access_token: responseJson.access_token,
                     refresh_token: responseJson.refresh_token
                 };
-
                 setLocalAccessTokens(access_tokens);
                 authenticationSuccess();
-
             }).catch(function (error) {
                 console.log(error);
                 authenticationFailure();
             });
         }
     }
-
     function authenticationSuccess() {
         var button = document.createElement("button");
         button.innerHTML = "Index Images!";
@@ -77,10 +99,8 @@
         div.innerHTML = "Congratulations! You have successfully connected your Box account! <br><br>" +
             " To make your image files in Box searchable click below! <br>";
         div.appendChild(button);
-
         div.style.visibility = "visible"
     }
-
     function authenticationFailure() {
         document.getElementById("connect").style.display="block";
         document.getElementById("afterConnect").style.display="none";
@@ -88,7 +108,6 @@
         // div.innerHTML = "Sorry! Authorization failed! <br>";
         // div.style.visibility = "visible"
     }
-
     function getLocalAccessTokens() {
         if (sessionStorage.access_tokens === undefined || sessionStorage.access_tokens == null) {
             return {};
@@ -96,7 +115,6 @@
             return JSON.parse(sessionStorage.access_tokens);
         }
     }
-
     function setLocalAccessTokens(access_tokens) {
         if (access_tokens == null) {
             sessionStorage.access_tokens = '{}';
@@ -104,16 +122,13 @@
             sessionStorage.access_tokens = JSON.stringify(access_tokens);
         }
     }
-
     function fetchAndIndexImagesFromBox() {
         fetchImageIdsFromBox();
         indexImages();
     }
-
     function refreshBoxToken() {
         boxOAuth(true);
     }
-
     function fetchImageIdsFromBox() {
         var limit = 100;
         var offset = 0;
@@ -121,7 +136,6 @@
             fetchAndStoreImageIdsFromBox(img_extensions[index], offset, limit);
         }
     }
-
     function fetchAndStoreImageIdsFromBox(extension, offset=0, limit=100) {
         var url = 'https://api.box.com/2.0/search?query=' + extension + '&fields=id&limit=' + limit +
             '&offset=' + offset + '&type=file&file_extensions=' + img_extensions.join(",");
@@ -135,11 +149,9 @@
             }
             throw new Error("Fetching image ids from Box failed with response code:" + response.statusText);
         });
-
         apiResponse.then(saveBoxImageSearchResponse).catch(function (error) {
             console.log(error);
         });
-
         apiResponse.then(function (response) {
             var nextOffset = offset + limit;
             if (totalEntries > nextOffset) {
@@ -149,34 +161,28 @@
             console.log(error);
         });
     }
-
     function saveBoxImageSearchResponse(response) {
         var imageIds = JSON.parse('{}');
         if (sessionStorage.imageIds) {
             imageIds = JSON.parse(sessionStorage.imageIds);
         }
-
         for (index = 0; index < response.entries.length; index++) {
             img_id = response.entries[index].id;
             if (!imageIds.hasOwnProperty(img_id)) {
-
                 imageIds[img_id] = false
             }
         }
-
         sessionStorage.imageIds = JSON.stringify(imageIds);
-        // document.getElementById("img_search_results").textContent = "Found " + response.total_count + " image(s)!";
+        document.getElementById("img_search_results").textContent = "Processing image(s)!";
     }
-
     function indexImages() {
         if (sessionStorage.imageIds) {
             imageIds = JSON.parse(sessionStorage.imageIds);
-
+            var len = Object.keys(imageIds).length
+            var i = 0;
             for (var imageId in imageIds) {
                 if (imageIds.hasOwnProperty(imageId) && !imageIds[imageId].processed) {
-
-                    metadata(imageId)
-
+                    metadata(imageId, i , len);
                     // To be used with fetch
                     // fetchImageFromBox(imageId).then(function(response) {
                     //     if (response.status == 200) {
@@ -188,44 +194,34 @@
                     //     console.log(error);
                     // });
                 }
+                i++;
             }
         }
     }
-
-    function metadata(fileId) {
-
+    function metadata(fileId, index, len) {
         var access_tokens = getLocalAccessTokens();
-
         // var fileId = data[0].imageId;
-
         var headers = new Headers({
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + access_tokens.box.access_token
         });
         var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata', headers, null, 'GET');
-
         httpResponse.then(function (response) {
             if (response.status == 200) {
                 return response.json();
             }
         }).then(function (res) {
-            checkAndUpdate(res, fileId);
+            checkAndUpdate(res, fileId, index, len);
         }).catch(function (error) {
             console.log(error);
         });
     }
-
-
-    function checkAndUpdate(res, imageId) {
-
+    function checkAndUpdate(res, imageId, index, len) {
         if (res && res.entries && res.entries.length != 0 && res.entries[0].imageContent) {
             console.log("Metadata already exists");
         } else {
-
             var imgFetch = fetchImageFromBox(imageId).then(function (response) {
-
                 if (response.status == 200) {
-
                     var result = {
                         "imageBlob": response.responseBody,
                         "imageId": imageId
@@ -234,9 +230,7 @@
                 }
                 throw new Error("Fetching image from Box failed with response code:" + response.statusText);
             });
-
             var imgParse = imgFetch.then(parseImage);
-
             if (res.entries.length == 0) {
                 Promise.all([imgFetch, imgParse]).then(addNewMetadata).catch(function (error) {
                     console.log("Indexing image with id: " + imageId + " failed");
@@ -248,30 +242,27 @@
                     console.log(error);
                 });
             }
-
         }
-    }
 
+
+        if(index == len - 1)
+            document.getElementById("img_search_results").textContent = "Processing Done!";
+    }
     function updateMetadata(data) {
         var access_tokens = getLocalAccessTokens();
-
         var metadata = [{
             "op": "add",
             "path": "/imageContent",
             "value": data[1]
         }]
-
         var fileId = data[0].imageId;
-
         var xhr = new XMLHttpRequest();
-
         var headers = new Headers({
             'Content-Type': 'application/json-patch+json',
             'Authorization': 'Bearer ' + access_tokens.box.access_token
         });
         var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties',
             headers, JSON.stringify(metadata), 'PUT');
-
         httpResponse.then(function (response) {
             if (response.status == 200) {
                 return response.json();
@@ -281,25 +272,18 @@
         }).catch(function (error) {
             console.log("Some error occured while updating metadata");
         });
-
     }
-
     function addNewMetadata(data) {
-
         var access_tokens = getLocalAccessTokens();
-
         var body = {
             "imageContent": data[1]
         }
-
         var fileId = data[0].imageId;
-
         var headers = new Headers({
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + access_tokens.box.access_token
         });
         var httpResponse = httpRequest('https://api.box.com/2.0/files/' + fileId + '/metadata/global/properties', headers, JSON.stringify(body), 'POST');
-
         httpResponse.then(function (response) {
             if (response.status == 200) {
                 return response.json();
@@ -309,19 +293,14 @@
         }).catch(function (error) {
             console.log("Some error occured while adding metadata");
         });
-
     }
-
-
     function fetchImageFromBox(imageId) {
         return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content', 'blob');
         // With fetch
         // return fetchDataFromBox('https://api.box.com/2.0/files/' + imageId + '/content');
     }
-
     function fetchDataFromBox(url, responseType = 'json') {
         return new Promise(function (resolve, reject) {
-
             access_tokens = getLocalAccessTokens();
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
@@ -349,13 +328,10 @@
             };
             xhr.send();
         });
-
-
         // To be used once fetch stops lowercasing headers
         // var headers = new Headers({Authorization: 'Bearer ' + access_tokens.box.access_token });
         // return httpRequest(url, headers);
     }
-
     function parseImage(imageBlob) {
         return new Promise(function (resolve, reject) {
             Tesseract.recognize(imageBlob.imageBlob)
@@ -366,7 +342,6 @@
             });
         });
     }
-
     function httpRequest(url, headers, body, method = 'GET', mode = 'cors') {
         if (url == null) {
             throw "URL is not specified for the request."
@@ -383,12 +358,11 @@
         }
         return fetch(url, request);
     }
-
     function searchFilesInBox(url='', offset=0, limit=100) {
         if (url == '') {
             var searchVal = document.getElementById("file_search_box").value;
             if (searchVal != null && searchVal.trim() != '') {
-                url = 'https://api.box.com/2.0/search?query=' + searchVal.trim() + '&fields=id,name&type=file'
+                url = 'https://api.box.com/2.0/search?query=' + searchVal.trim() + '&type=file'
             }
         }
         if (url == '') {
@@ -406,11 +380,9 @@
         }).catch(function (error) {
             console.log(error);
         });
-
         apiResponse.then(handleFileSearchResponse).catch(function (error) {
             console.log(error);
         });
-
         apiResponse.then(function (response) {
             var nextOffset = offset + limit;
             if (totalEntries > nextOffset) {
@@ -420,24 +392,76 @@
             console.log(error);
         });
     }
-
     function handleFileSearchResponse(response) {
+        var access_tokens = getLocalAccessTokens();
         var div = document.getElementById("search_results");
         div.innerHTML = '';
         var results_found = response.total_count;
         div.append(document.createElement("br"));
         div.append('\nFound ' + results_found + ' result(s) for your search query!')
         div.append(document.createElement("br"));
+
+        var imgUl = document.createElement("ol");
+
         for (var index = 0; index < response.entries.length; index++) {
-            var link = document.createElement("a");
-            var linkText = document.createTextNode(response.entries[index].name);
-            link.appendChild(linkText);
-            // link.title = response.entries[index].name;
-            link.target = "_blank";
-            link.href = "https://app.box.com/file/" + response.entries[index].id;
-            div.appendChild(link);
-            div.append(document.createElement("br"));
+
+            var imgLi = document.createElement("li");
+
+            var imgButton = document.createElement('a');
+            imgButton.setAttribute("href", "#")
+            imgButton.setAttribute("class", "accordion");
+            imgButton.append(document.createTextNode(response.entries[index].name));
+
+            imgLi.append(imgButton);
+
+            var imgCont = document.createElement('div');
+            imgCont.setAttribute("class", "panel");
+            var imgText = document.createElement('div');
+            imgText.setAttribute("class", "preview-container imgpreview" + index);
+
+            var preview = new Box.Preview();
+            preview.show(response.entries[index].id, access_tokens.box.access_token, {
+                container: '.imgpreview' + index,
+                showDownload: true
+            });
+
+            imgCont.append(imgText);
+
+            imgLi.append(imgCont);
+
+            imgUl.append(imgLi);
+            
+            // var link = document.createElement("a");
+            // var linkText = document.createTextNode(response.entries[index].name);
+            // link.appendChild(linkText);
+            // // link.title = response.entries[index].name;
+            // link.target = "_blank";
+            // link.href = "https://app.box.com/file/" + response.entries[index].id;
+            // div.appendChild(link);
+            // div.append(document.createElement("br"));
         }
+
+        div.append(imgUl);
+
+        var acc = document.getElementsByClassName("accordion");
+        var i;
+
+        for (i = 0; i < acc.length; i++) {
+          acc[i].addEventListener("click", function() {
+            this.classList.toggle("active");
+            var panel = this.nextElementSibling;
+            if (panel.style.maxHeight){
+              panel.style.maxHeight = null;
+            } else {
+              panel.style.maxHeight = panel.scrollHeight + "px";
+            } 
+          });
+        }
+    }
+
+    function enterPress(e) {
+        if(e.keyCode == 13)
+            searchFilesInBox();
     }
 
     </script>
@@ -463,7 +487,7 @@
     </div>
     <div id="search_space">
         <h3>File Search</h3>
-        <input type="search" id="file_search_box" placeholder="Search your files">
+        <input type="search" id="file_search_box" placeholder="Search your files" onkeypress="enterPress(event)">
         <button onclick="searchFilesInBox()">Go!</button>
     </div>
     <div id="search_results">
