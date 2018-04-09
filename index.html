@@ -5,29 +5,39 @@
     <title>ImgFind</title>
     <script src='https://cdn.rawgit.com/naptha/tesseract.js/1.0.10/dist/tesseract.js'></script>
     <script>
-    var url = window.location.href;
-    var state = url.substring(url.indexOf('=') + 1, url.indexOf('&'))
-    var code = url.substring(url.indexOf('code=') + 5, url.length)
     var img_extensions = ['png', 'jpg', 'jpeg', 'svg', 'tif', 'bmp', 'pnm'];
 
     function boxOAuth(refresh = false) {
+        var url = window.location.href;
+        var code = null
+        if (url.indexOf('code') > -1) {
+            code = url.substring(url.indexOf('code=') + 5, url.length);   
+        }
         var access_tokens = getLocalAccessTokens();
         sessionStorage.service = 'box';
+        var requestBody = null;
         if (access_tokens.hasOwnProperty('box') &&
             access_tokens.box.hasOwnProperty('access_token') &&
             access_tokens.box.access_token != null) {
             authenticationSuccess();
-        } else {
+        } else if (refresh && access_tokens.hasOwnProperty('box') &&
+            access_tokens.box.hasOwnProperty('refresh_token') &&
+            access_tokens.box.refresh_token != null) {
             var requestBody = new URLSearchParams();
-            if (refresh && access_tokens.hasOwnProperty('box') &&
-                access_tokens.box.hasOwnProperty('refresh_token') &&
-                access_tokens.box.refresh_token != null) {
-                requestBody.append('grant_type', 'refresh_token');
-                requestBody.append('refresh_token', access_tokens.box.refresh_token);
-            } else {
-                requestBody.append('grant_type', 'authorization_code');
-                requestBody.append('code', code);
-            }
+            requestBody.append('grant_type', 'refresh_token');
+            requestBody.append('refresh_token', access_tokens.box.refresh_token);
+        } else if (sessionStorage.getItem("box_auth_code") != null) {
+            var requestBody = new URLSearchParams();
+            requestBody.append('grant_type', 'authorization_code');
+            requestBody.append('code', sessionStorage.getItem("box_auth_code"));
+            sessionStorage.removeItem("box_auth_code");
+        } else if(code != null) {
+            sessionStorage.box_auth_code = code;
+            window.location = window.location.href.split('?')[0];
+        } else {
+            authenticationFailure();
+        }
+        if (requestBody != null) {
             requestBody.append('client_id', '1cf9xjqa83lx77agvkmm7rg635wvuh7t');
             requestBody.append('client_secret', 'o0p0xgaRvSooele09STKonmKLJiFzNbv');
             var headers = new Headers({'Content-Type': 'application/x-www-form-urlencoded'});
@@ -36,6 +46,7 @@
                 if (response.status == 200) {
                     return response.json();
                 }
+                alert("Box OAuth failed");
                 throw new Error("Box OAuth failed with response code:" + response.statusText);
 
             }).then(function (responseJson) {
@@ -436,7 +447,7 @@
 <h2 style="color:maroon">imgFind</h2>
 
 <div id = "connect" style= "display:none">
-    <button onclick="location.href = 'https://account.box.com/api/oauth2/authorize?response_type=code&client_id=1cf9xjqa83lx77agvkmm7rg635wvuh7t&state=security_token%3DKnhMJatFipTAnM0nHlZA'"; type="button">
+    <button onclick="location.href = 'https://account.box.com/api/oauth2/authorize?response_type=code&client_id=1cf9xjqa83lx77agvkmm7rg635wvuh7t'"; type="button">
         Connect to Box!
     </button> 
 </div>
